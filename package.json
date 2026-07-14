@@ -1,0 +1,27 @@
+{
+  "name": "integration-engine",
+  "version": "0.1.0",
+  "description": "File Watcher Service for D365 Integration Monitoring",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "keywords": ["d365", "integration", "file-watcher"],
+  "author": "Napas Jutha <napasjutha@gmail.com>",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "pg": "^8.11.0",
+    "redis": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.10.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
