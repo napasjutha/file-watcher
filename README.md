@@ -22,12 +22,12 @@ File Watcher Service for D365 Integration Monitoring & Control
 
 3. Start infrastructure:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 4. Verify database:
    ```bash
-   docker-compose ps
+   docker compose ps
    ```
 
 5. Build project:
@@ -41,28 +41,9 @@ File Watcher Service for D365 Integration Monitoring & Control
 - `npm run build` - Compile TypeScript
 - `npm start` - Run compiled code
 
-## Architecture
-
-See `docs/superpowers/specs/2026-07-14-initial-setup-design.md` for design details.
-
-## Verification Checklist
-
-Phase 1-5 setup complete when:
-
-- [x] Docker Desktop running
-- [x] `docker-compose ps` shows both services "Up"
-- [x] `.env` file exists
-- [x] Database connects via localhost:5432
-- [x] `integration_db` database exists
-- [x] `interface_table` exists with test row
-- [x] `npm install` completes without errors
-- [x] `npm run build` completes without errors
-- [x] `dist/index.js` created
-- [x] Git branches: main, develop, feature/setup-verification
 
 ## Next Steps
 
-- Create GitHub repository and push branches
 - Begin component implementation (config providers, adapters)
 - Add database migration framework
 - Implement OpenTelemetry instrumentation
