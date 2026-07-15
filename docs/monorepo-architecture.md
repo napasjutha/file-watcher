@@ -88,7 +88,7 @@ integration-engine/
 │   ├── watcher/                              # File Watcher Service (deployable)
 │   │   ├── src/
 │   │   │   ├── adapters/                     # Technology-specific file observation
-│   │   │   │   ├── adapter.ts                # Contract interface
+│   │   │   │   ├── adapter.ts                # Contract interface - include file-observation ( adapter->engine)
 │   │   │   │   ├── adapter-result.ts
 │   │   │   │   ├── adapter-registry.ts
 │   │   │   │   ├── sftp/
@@ -187,8 +187,6 @@ integration-engine/
 ├── packages/
 │   ├── contracts/                            # Shared schemas
 │   │   ├── src/
-│   │   │   ├── observations/
-│   │   │   │   └── file-observation.ts       # Adapter → Engine contract
 │   │   │   ├── events/
 │   │   │   │   └── file-event.ts             # Watcher → Gateway contract
 │   │   │   ├── gateway/
