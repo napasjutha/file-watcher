@@ -66,6 +66,24 @@ filesystem path for folder; a host for SFTP later). `InterfaceScope.inboundPath`
 is "which directory on it." `folder.adapter.ts` resolves the real directory
 via `path.join(context.endpoint, scope.inboundPath)`.
 
+**Data flow:**
+```
+Filesystem
+    │  fs.readdir / fs.stat
+    ▼
+folder.adapter.ts  ──emits──▶  FileObservation[]
+                                     │
+                                     ▼
+                            Watcher Engine (processObservation)
+                                     │
+                                     ▼
+                              StateRepository
+```
+The adapter's only output is `FileObservation[]` — everything past that
+(lifecycle decisions, persistence) is the Engine's, already built and
+reconciled. `Adapter` is a stable contract: SFTP/Blob/SharePoint implement
+the same interface later without this one changing.
+
 **`AdapterError`** — a single error class (in `adapter.ts`, shared across
 future adapters) carrying `{ connectionRef, interfaceId, cause }`, thrown
 when the underlying filesystem operation fails (directory missing, not
@@ -78,7 +96,9 @@ readable, etc.). Wraps the real Node error rather than swallowing it.
    `AdapterError` with context attached.
 3. Filter entries by `new RegExp(scope.filePattern).test(name)`.
 4. For each match, `fs.promises.stat(path.join(resolvedPath, name))` to get
-   `size` and `mtime`.
+   `size` and `mtime`. If `stat` throws `ENOENT` (file deleted between
+   `readdir` and `stat` — a real race, not hypothetical), skip that entry
+   and continue with the rest rather than failing the whole scan.
 5. Return `FileObservation[]` — `{ interfaceId: scope.interfaceId, path: <full
    resolved file path>, size, mtime }` — for every currently-matching file,
    every call. No comparison against prior state, no filtering of "already
@@ -96,6 +116,14 @@ isolation across a polling cycle is the future Scheduler's responsibility,
 not the adapter's — matches the original Watcher Engine design's precedent
 of pushing that concern up to the orchestrator layer.
 
+| Failure | Behavior | Rationale |
+|---|---|---|
+| `inboundPath` directory missing (`ENOENT` on `readdir`) | Throw `AdapterError` | Caller (future Scheduler) decides retry/alert policy |
+| Directory not readable (`EACCES`) | Throw `AdapterError` | Same — not this layer's decision |
+| File deleted between `readdir` and `stat` (`ENOENT` on `stat`) | Skip that file, continue with the rest | The file is gone — nothing to observe. A real race under active polling, not hypothetical; failing the whole scan over one vanished file would be wrong |
+| Symlink (file or directory) | Follow it (`fs.promises.stat` already follows symlinks by default) | No special-casing for MVP — a symlinked file behaves like a real one. Symlink loops aren't traversed since the adapter doesn't recurse into subdirectories at all |
+| Directory entry is a subdirectory | Skip (not a file) | Matches architecture doc: no recursive traversal in MVP |
+
 ## Testing
 
 Real filesystem, not mocked — matches the original design's own testing
@@ -107,7 +135,12 @@ is the one adapter where "real" costs nothing to set up).
 - Clean up (`fs.rmSync(..., { recursive: true })`) after each test.
 - Cases: matches-only-pattern-matching-files, ignores non-matching names,
   ignores subdirectories, returns correct `size`/`mtime`/`path`/`interfaceId`,
-  throws `AdapterError` when the directory doesn't exist.
+  throws `AdapterError` when the directory doesn't exist, skips (doesn't
+  throw for) a file removed after `readdir` but before `stat` — simulated by
+  deleting the file in a hook between listing and the adapter's own `stat`
+  call, or by asserting the skip logic directly against a mocked `stat`
+  rejection for that one case (the rest of the suite uses the real
+  filesystem per the strategy above).
 
 ## Out of scope (follow-up work)
 
