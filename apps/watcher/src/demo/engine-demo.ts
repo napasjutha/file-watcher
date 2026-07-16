@@ -39,8 +39,7 @@ async function runScenario1_DuplicateDetection(
     interfaceId: config.interfaceId,
     path: filePath,
     size: fileSize,
-    modified: startTime,
-    observedAt: startTime,
+    mtime: startTime,
   };
 
   const event1 = await processObservation(observation1, config, stateRepo, startTime);
@@ -60,8 +59,7 @@ async function runScenario1_DuplicateDetection(
     interfaceId: config.interfaceId,
     path: filePath,
     size: fileSize,
-    modified: startTime, // Same modified time (file hasn't changed)
-    observedAt: time2,
+    mtime: startTime, // Same mtime (file hasn't changed)
   };
 
   const event2 = await processObservation(observation2, config, stateRepo, time2);
@@ -81,8 +79,7 @@ async function runScenario1_DuplicateDetection(
     interfaceId: config.interfaceId,
     path: filePath,
     size: fileSize,
-    modified: startTime,
-    observedAt: time3,
+    mtime: startTime,
   };
 
   const event3 = await processObservation(observation3, config, stateRepo, time3);
@@ -121,8 +118,7 @@ async function runScenario2_StuckFile(
     interfaceId: config.interfaceId,
     path: filePath,
     size: fileSize,
-    modified: startTime,
-    observedAt: startTime,
+    mtime: startTime,
   };
 
   const event1 = await processObservation(observation1, config, stateRepo, startTime);
@@ -142,8 +138,7 @@ async function runScenario2_StuckFile(
     interfaceId: config.interfaceId,
     path: filePath,
     size: fileSize, // Same size (no growth)
-    modified: startTime, // Same modified time
-    observedAt: time2,
+    mtime: startTime, // Same mtime
   };
 
   const event2 = await processObservation(observation2, config, stateRepo, time2);
