@@ -1,5 +1,13 @@
 # File Watcher Service - Monorepo Architecture with D365 Integration
 
+> **⚠️ SUPERSEDED (2026-07-17).** The external-services architecture below (Node
+> Watcher + Gateway) has been replaced by a D365-native design: the entire system is
+> built inside D365 (Dataverse tables + C# plugin engine + Power Automate adapter flows
+> + model-driven monitoring app), with no Gateway and no external hosting. See
+> [docs/superpowers/specs/2026-07-17-d365-native-architecture-design.md](superpowers/specs/2026-07-17-d365-native-architecture-design.md).
+> This document is kept as the record of the reference implementation: the TypeScript
+> Watcher Engine in `apps/watcher/` remains the executable reference spec for the port.
+
 **Date:** 2026-07-14
 
 
