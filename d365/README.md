@@ -19,6 +19,13 @@ C# port of the frozen TypeScript Watcher Engine (`apps/watcher/src/engine/`), pe
   `fwm_fileobservation` Create — the one transaction that replaces the Gateway),
   `CheckMissingSlaPlugin` (Custom API `fwm_CheckMissingSla`), and `Schema.cs`
   (logical names + fixed `fwm_filestatus` choice values 100000000–100000004).
+  **Strong-named** (dev `.snk` checked in — swap for an org key in production) and
+  built **self-contained**: the engine sources compile directly into this one DLL,
+  as classic plugin registration requires.
+- `deploy/` — **plug & play**: `provision.py` (stdlib-only Python, idempotent)
+  creates the global choice, all 5 tables/columns/alternate keys, uploads the
+  plugin assembly, registers the sync step, and creates the Custom API against any
+  environment via the Web API. See `deploy/README.md` for the 3-step quickstart.
 
 ## Status
 
