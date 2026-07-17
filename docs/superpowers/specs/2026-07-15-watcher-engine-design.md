@@ -1,5 +1,7 @@
 # Watcher Engine — Design Spec
 
+> **ℹ️ STILL NORMATIVE FOR SEMANTICS (2026-07-17):** the rule pipeline, state-transition matrix, and lifecycle semantics defined here carry unchanged into the D365-native build — the C# plugin port must match them (see the [D365-native design spec](2026-07-17-d365-native-architecture-design.md)). Only the platform details (TypeScript service, Postgres, Gateway hand-off) are superseded; the TS engine is now the frozen executable reference spec.
+
 **Date:** 2026-07-15
 **Status:** Approved (pending final spec review)
 **Related:** [docs/monorepo-architecture.md](../../monorepo-architecture.md)

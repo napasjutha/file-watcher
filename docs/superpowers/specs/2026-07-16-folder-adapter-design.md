@@ -1,5 +1,7 @@
 # Folder Adapter — Design Spec
 
+> **⚠️ SUPERSEDED (2026-07-17):** the architecture pivoted to a D365-native build (Dataverse + Power Platform); this component's production role is replaced per the [D365-native design spec](2026-07-17-d365-native-architecture-design.md). The TypeScript implementation described here remains in-repo as part of the frozen executable reference spec.
+
 **Date:** 2026-07-16
 **Status:** Approved (pending final spec review)
 **Related:** [docs/monorepo-architecture.md](../../monorepo-architecture.md)

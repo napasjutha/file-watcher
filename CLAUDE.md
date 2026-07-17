@@ -12,9 +12,12 @@ there (not here). The client provisions nothing beyond the D365 environment + Po
 
 **Normative design:**
 [`docs/superpowers/specs/2026-07-17-d365-native-architecture-design.md`](docs/superpowers/specs/2026-07-17-d365-native-architecture-design.md)
-— read it before doing anything architectural. The old external-services design
-([`docs/monorepo-architecture.md`](docs/monorepo-architecture.md)) is superseded and kept as
-historical record.
+— read it before doing anything architectural. The phased build plan is
+[`docs/superpowers/plans/2026-07-17-d365-native-implementation.md`](docs/superpowers/plans/2026-07-17-d365-native-implementation.md).
+The old external-services design ([`docs/monorepo-architecture.md`](docs/monorepo-architecture.md))
+is superseded and kept as historical record; the pre-pivot specs and plans under
+`docs/superpowers/` carry banners marking them historical/superseded (the Watcher Engine spec
+stays normative for rule/state semantics).
 
 **What this repo is now:**
 - **Design home** — specs and plans under `docs/superpowers/` (specs in
