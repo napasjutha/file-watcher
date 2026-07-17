@@ -58,19 +58,19 @@ Source → target, signatures preserved:
 
 Source: `engine/state/state-repository.ts` (interface), `engine/state/in-memory-state-repository.ts`, `database/repositories/state.repository.ts`, `database/client.ts`, `database/migrations/*`
 
-- [ ] `interface IStateRepository { WatcherState? Get(string interfaceId, string filePath); void Save(WatcherState state); IReadOnlyList<WatcherState> FindByInterface(string interfaceId); }` — same contract as TS
-- [ ] `DataverseStateRepository` against `IOrganizationService`: upsert via the (interface, file path) **alternate key** (replaces Postgres `ON CONFLICT DO UPDATE`); runs inside the plugin transaction, so state save + event insert commit atomically
-- [ ] No migration-framework port: table definitions live in the solution; `client.ts` pooling has no equivalent (platform-managed)
-- [ ] Postgres repos (`interface-config.repository.ts`, `connection-config.repository.ts`) are not ported as classes — the plugin reads the `fwm_interface` row via the observation's lookup; flows query `fwm_interface`/`fwm_connection` directly
+- [x] `IStateRepository` — same contract as TS (`d365/FileWatcherMonitoring.Plugins/Contracts.cs`)
+- [x] `DataverseStateRepository` against `IOrganizationService`: alternate-key `UpsertRequest` (replaces Postgres `ON CONFLICT DO UPDATE`), pipeline-transactional — written and **compiled against Microsoft.CrmSdk.CoreAssemblies** (`d365/FileWatcherMonitoring.Dataverse/`); behavioral verification with FakeXrmEasy happens in the client env
+- [x] No migration-framework port: table definitions live in the solution; `client.ts` pooling has no equivalent (platform-managed)
+- [x] Postgres repos (`interface-config.repository.ts`, `connection-config.repository.ts`) are not ported as classes — the plugin reads the `fwm_interface` row via the observation's lookup; flows query `fwm_interface`/`fwm_connection` directly
 
 ### Task 4: Plugin + Custom APIs (the new entry points)
 
 Source: the composition previously done by `scheduler/scheduler.ts` + `demo/engine-demo.ts` wiring
 
-- [ ] `FileObservationCreatePlugin`: synchronous, PostOperation on `fwm_fileobservation` Create — hydrates `InterfaceConfig`, calls `WatcherEngine.ProcessObservation`, saves state + inserts `fwm_fileevent` in-transaction, throws on invalid transition (fail-fast; per-observation isolation is free since each create is its own pipeline)
-- [ ] Custom API `fwm_ProcessObservation` (same logic, callable for reprocessing/tests)
-- [ ] Custom API `fwm_CheckMissingSla` (pages per interface — 2-min plugin budget)
-- [ ] `demo/engine-demo.ts` → a documented manual smoke script: create observation row → verify state + event rows
+- [x] `FileObservationCreatePlugin`: synchronous, PostOperation on `fwm_fileobservation` Create — written and **compiled** (`d365/FileWatcherMonitoring.Dataverse/FileObservationCreatePlugin.cs`); registration happens in the client env
+- [x] Custom API `fwm_ProcessObservation` — **dropped as redundant**: creating an `fwm_fileobservation` row *is* the processing entry point (and the reprocessing mechanism); documented here as the deliberate deviation
+- [x] Custom API `fwm_CheckMissingSla` backing plugin (one interface per call — far under the 2-min budget) — `CheckMissingSlaPlugin.cs`; API definition created at registration time
+- [ ] Register assembly + Custom API in the client env, then run the manual smoke that replaces `demo/engine-demo.ts`: create an observation row → verify state + event rows
 
 ### Task 5: Adapters + scheduler → Power Automate flows (behavior checklist)
 
