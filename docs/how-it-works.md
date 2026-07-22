@@ -4,6 +4,53 @@ Plain-language runtime walkthrough. Normative details live in the
 [design spec](superpowers/specs/2026-07-17-d365-native-architecture-design.md);
 this document explains the moving parts and one file's journey through them.
 
+```mermaid
+flowchart TB
+    FS["File storage<br/>SFTP / Blob / SharePoint / network folders"]
+
+    subgraph PP["Power Platform (all Microsoft-hosted — zero servers)"]
+        subgraph FLOWS["Power Automate flows (observe only)"]
+            WF["Watch flow<br/>lists file metadata per poll"]
+            SW["SLA sweep flow<br/>calls fwm_CheckMissingSla"]
+            AF["Alert flow<br/>on stuck / missing events"]
+        end
+        subgraph DV["Dataverse (the database)"]
+            OBS[("fwm_fileobservation<br/>intake, transient")]
+            CFG[("fwm_interface +<br/>fwm_connection<br/>config")]
+            ST[("fwm_filestate<br/>snapshot")]
+            EV[("fwm_fileevent<br/>append-only audit")]
+        end
+        subgraph PLUGIN["C# plugin (the logic — one transaction)"]
+            P1["FileObservationCreatePlugin<br/>duplicate → stuck → stability,<br/>transition allow-list"]
+            P2["CheckMissingSlaPlugin<br/>absence sweep, sentinel row"]
+        end
+        APP["Model-driven app<br/>dashboards, event views, config forms"]
+        subgraph API["API entry points (self-reporting)"]
+            RP["fwm_ReportApiMessage<br/>Received / Processed / Failed"]
+            AM[("fwm_apimessage +<br/>fwm_apievent")]
+        end
+    end
+    SRC["API integrations /<br/>F&O business events"] -->|Custom API call| RP
+    RP --> AM
+
+    N["Teams / Email<br/>alert owners"]
+
+    FS -->|"scheduled polling,<br/>metadata only"| WF
+    WF -->|creates row| OBS
+    OBS -->|"sync trigger,<br/>same transaction"| P1
+    CFG --> P1
+    P1 -->|upsert| ST
+    P1 -->|insert| EV
+    SW -->|Custom API| P2
+    P2 --> ST
+    P2 --> EV
+    EV -->|on create| AF
+    AF --> N
+    ST --> APP
+    EV --> APP
+    CFG --- APP
+```
+
 ## The alignment (what runs where)
 
 | Concern | Where it lives | Who hosts it |
@@ -27,7 +74,7 @@ on the Dataverse side — F&O needs zero changes, no X++. Events are visible to 
 linked Dataverse, or optionally copied into an F&O data entity with one extra flow step
 (standard Fin & Ops connector).
 
-## The five tables
+## The seven tables
 
 1. **`fwm_connection`** — where files live (SFTP host, Blob account, SharePoint site).
    Metadata only. Credentials are never stored in any table — they live in Power Automate
@@ -42,6 +89,10 @@ linked Dataverse, or optionally copied into an F&O data entity with one extra fl
    (interface id, file path).
 5. **`fwm_fileevent`** — append-only audit trail. Every meaningful status change is one row,
    written in the same transaction as the state change.
+6. **`fwm_apimessage`** — API entry-point message state (self-reported — see the "second
+   rule pack" section below). A message has identity, so it is its own state row;
+   `__heartbeat__` is the feed-SLA sentinel.
+7. **`fwm_apievent`** — append-only audit trail for API message lifecycle events.
 
 ## Runtime walkthrough
 
@@ -99,6 +150,20 @@ re-fires on the next missed day.
   full per-batch event history; ops staff configure new interfaces in the same app — a form,
   not a deployment.
 
+## API entry points — the second rule pack
+
+Interfaces that enter through APIs (OData/custom services, async messages) don't need
+watching — they already touch D365 when they run, so they **self-report** into the same
+monitor: the integration (or an F&O business-event flow) calls Custom API
+`fwm_ReportApiMessage` with `Received` / `Processed` / `Failed`. Same engine skeleton,
+same transaction guarantee, own statuses (`MSG_RECEIVED`, `MSG_PROCESSED`,
+`MSG_DUPLICATE`, `MSG_FAILED`, `MSG_TIMEOUT`) in `fwm_apimessage` +
+append-only `fwm_apievent`. A sweep (`fwm_CheckApiSla`) adds what self-reporting can't:
+timeouts (received but never processed) and the feed heartbeat (`FEED_MISSING_BY_SLA` —
+nothing arrived today, sentinel-idempotent like the file SLA). Files are *watched*
+because they can't speak; APIs *report* because they can. One monitor, two rule packs.
+Details: [API entry-point monitoring spec](superpowers/specs/2026-07-22-api-entrypoint-monitoring-design.md).
+
 ## Why there is no Gateway / outbox / retry queue
 
 The original external-services design needed an outbox because the event writer sat outside
@@ -114,6 +179,8 @@ relocating the logic rather than cutting features.
 - Test vectors are generated **by executing** that reference
   (`npm run parity:vectors -w @apps/watcher`); the C# engine must pass all 43 vector-driven
   parity tests (`d365/FileWatcherMonitoring.Plugins.Tests`).
-- The Dataverse layer (repository upsert, plugin path, sweep) has 12 further tests against a
-  fake `IOrganizationService` (`d365/FileWatcherMonitoring.Dataverse.Tests`).
-- CI runs all three suites plus a vector-drift check on every push.
+- The Dataverse layer (repository upsert, plugin path, both sweeps, the API rule pack's
+  transition policy/report handling) has 38 further tests against a fake
+  `IOrganizationService` (`d365/FileWatcherMonitoring.Dataverse.Tests`).
+- 8 python drift guards machine-check the provisioning script against `Schema.cs`.
+- CI runs all suites plus a vector-drift check on every push — **170 checks total**.

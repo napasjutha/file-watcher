@@ -38,3 +38,13 @@ jobs:
         run: dotnet test d365/FileWatcherMonitoring.Dataverse.Tests --nologo
       - name: Build Dataverse plugin assembly
         run: dotnet build d365/FileWatcherMonitoring.Dataverse --nologo
+      - name: Build local E2E simulator
+        run: dotnet build d365/FileWatcherMonitoring.Simulator --nologo
+
+  deploy-tooling:
+    name: Deploy tooling (schema drift guard + dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unittest suite (Schema.cs cross-check, key budget, dry-run)
+        run: python3 -m unittest discover -s d365/deploy/tests -v

@@ -47,28 +47,42 @@ python3 d365/deploy/provision.py \
 ```
 
 Creates: `fwm_filestatus` global choice (values 100000000–100000004, matching
-`Schema.cs`), the 5 tables with all columns, the alternate keys
+`Schema.cs`), the 7 tables with all columns, the alternate keys
 (`fwm_filestate` interfaceid+filepath, `fwm_fileevent` eventid), the plugin
 assembly + sync PostOperation step on `fwm_fileobservation` Create, and Custom API
 `fwm_CheckMissingSla`. Existing pieces are skipped, so re-running after a partial
 failure is fine. Use `--tables-only` to provision schema without the plugin.
 
-## 3. Smoke test (proves the whole engine path)
+Preview the full plan first with zero risk (no token, no HTTP):
 
-Create one `fwm_interface` row (id `TEST-001`, stability 30s, stuck 3600s,
-SLA `23:59`, enabled), then create an `fwm_fileobservation` row
-(interface id `TEST-001`, path `/in/test.csv`, size 100, modified = now).
+```bash
+python3 d365/deploy/provision.py --url https://x --dry-run --seed d365/deploy/seed.example.json
+```
 
-Expected within the same request: an `fwm_filestate` row (`FILE_DETECTED`,
-file name `test.csv`, a batch id) and one `fwm_fileevent` row (`FILE_DETECTED`,
-same batch id). Create the same observation again with the same size ≥30s later →
-state flips to `FILE_STABLE` + second event, **same batch id**.
+Add `--seed d365/deploy/seed.example.json` (copy + edit first) to the real run to load
+sample `fwm_connection`/`fwm_interface` rows.
+
+## 3. Smoke test (automated — proves the whole engine path)
+
+```bash
+python3 d365/deploy/smoke.py --url https://YOURORG.crm.dynamics.com [--cleanup]
+```
+
+Creates a `SMOKE-001` interface (5s stability), posts an observation, asserts
+`fwm_filestate` = `FILE_DETECTED` + one event, waits past the window, re-observes,
+asserts `FILE_STABLE` + second event with the **same batch id**. Exit 0 = the plugin,
+tables, keys, and transaction semantics are all live. `--cleanup` removes its rows.
+
+Tooling self-checks (run locally / in CI, no environment):
+`python3 -m unittest discover -s d365/deploy/tests` — cross-checks provision.py against
+`Schema.cs` (choice values, every column, alternate-key 900-byte budget) and executes a
+full dry-run.
 
 ## 4. Flows, app, roles (maker portal — manual by design)
 
 - Flows: follow [`docs/superpowers/plans/2026-07-17-flow-runbook.md`](../../docs/superpowers/plans/2026-07-17-flow-runbook.md)
   (watch flow per connection, SLA sweep calling `fwm_CheckMissingSla`, alert flow).
-- Add the 5 tables + flows to a solution named `FileWatcherMonitoring` for ALM.
+- Add the 7 tables + flows to a solution named `FileWatcherMonitoring` for ALM.
 - Model-driven app over interface/connection/state/event tables; security roles
   (`FWM Integration Admin` maintain-setup, `FWM Integration Operator` monitor).
 - Bulk-delete job for `fwm_fileobservation` rows older than 7 days.

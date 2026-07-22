@@ -5,9 +5,12 @@ Dataverse tables (the database), a C# plugin (the logic), Power Automate flows (
 watchers), and a model-driven Power App (config + monitoring UI). **Zero servers** — nothing
 hosted outside the client's D365 environment and Power Platform.
 
-It watches file sources (SFTP / Azure Blob / SharePoint / on-prem folders), tracks each
-file's lifecycle (`FILE_DETECTED`, `FILE_STABLE`, `FILE_DUPLICATE`, `FILE_STUCK`,
-`FILE_MISSING_BY_SLA`), and alerts owners when feeds are stuck or missed their SLA.
+It monitors both interface entry-point types on one engine: **file sources**
+(SFTP / Azure Blob / SharePoint / on-prem folders) are watched — lifecycle
+`FILE_DETECTED → FILE_STABLE`, plus duplicate/stuck/missing-by-SLA detection — and
+**API entry points** self-report via Custom API `fwm_ReportApiMessage`
+(`MSG_RECEIVED/PROCESSED/FAILED/TIMEOUT` + feed heartbeat). Owners get alerted the
+minute a feed is stuck, failed, or silent.
 
 **Start here:**
 - [How it works](docs/how-it-works.md) — plain-language runtime walkthrough
@@ -21,7 +24,7 @@ file's lifecycle (`FILE_DETECTED`, `FILE_STABLE`, `FILE_DUPLICATE`, `FILE_STUCK`
 |---|---|---|
 | `d365/FileWatcherMonitoring.Plugins/` | C# engine core (rules, transition allow-list, sweep) | **Production source** — deployed as plugin |
 | `d365/FileWatcherMonitoring.Dataverse/` | Plugin wrappers, `DataverseStateRepository`, Custom API | **Production source** — signed self-contained DLL |
-| `d365/FileWatcherMonitoring.*.Tests/` | 43 parity tests + 12 plugin-layer tests | CI |
+| `d365/FileWatcherMonitoring.*.Tests/` | 43 parity tests + 38 plugin/API-layer tests | CI |
 | `d365/deploy/provision.py` | One-shot idempotent environment provisioning (tables, choice, keys, plugin, Custom API) | CI-adjacent tooling |
 | `apps/watcher/src/engine/` | **Frozen TypeScript reference engine** + 81 tests — the executable spec the C# port must match | Reference only, no new features |
 | `apps/watcher/src/parity/` | Generates shared test vectors by executing the reference engine | Tooling |
@@ -35,7 +38,7 @@ file's lifecycle (`FILE_DETECTED`, `FILE_STABLE`, `FILE_DUPLICATE`, `FILE_STUCK`
 npm install && npm test                                     # 81 TS reference tests
 npm run parity:vectors -w @apps/watcher                     # regenerate shared vectors (idempotent)
 dotnet test d365/FileWatcherMonitoring.Plugins.Tests        # 43 vector-driven parity tests
-dotnet test d365/FileWatcherMonitoring.Dataverse.Tests      # 12 plugin-layer tests (fake IOrganizationService)
+dotnet test d365/FileWatcherMonitoring.Dataverse.Tests      # 38 plugin + API-layer tests (fake IOrganizationService)
 dotnet build d365/FileWatcherMonitoring.Dataverse -c Release # the deployable plugin DLL
 ```
 
