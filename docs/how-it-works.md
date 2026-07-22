@@ -4,6 +4,47 @@ Plain-language runtime walkthrough. Normative details live in the
 [design spec](superpowers/specs/2026-07-17-d365-native-architecture-design.md);
 this document explains the moving parts and one file's journey through them.
 
+```mermaid
+flowchart TB
+    FS["File storage<br/>SFTP / Blob / SharePoint / network folders"]
+
+    subgraph PP["Power Platform (all Microsoft-hosted — zero servers)"]
+        subgraph FLOWS["Power Automate flows (observe only)"]
+            WF["Watch flow<br/>lists file metadata per poll"]
+            SW["SLA sweep flow<br/>calls fwm_CheckMissingSla"]
+            AF["Alert flow<br/>on stuck / missing events"]
+        end
+        subgraph DV["Dataverse (the database)"]
+            OBS[("fwm_fileobservation<br/>intake, transient")]
+            CFG[("fwm_interface +<br/>fwm_connection<br/>config")]
+            ST[("fwm_filestate<br/>snapshot")]
+            EV[("fwm_fileevent<br/>append-only audit")]
+        end
+        subgraph PLUGIN["C# plugin (the logic — one transaction)"]
+            P1["FileObservationCreatePlugin<br/>duplicate → stuck → stability,<br/>transition allow-list"]
+            P2["CheckMissingSlaPlugin<br/>absence sweep, sentinel row"]
+        end
+        APP["Model-driven app<br/>dashboards, event views, config forms"]
+    end
+
+    N["Teams / Email<br/>alert owners"]
+
+    FS -->|"scheduled polling,<br/>metadata only"| WF
+    WF -->|creates row| OBS
+    OBS -->|"sync trigger,<br/>same transaction"| P1
+    CFG --> P1
+    P1 -->|upsert| ST
+    P1 -->|insert| EV
+    SW -->|Custom API| P2
+    P2 --> ST
+    P2 --> EV
+    EV -->|on create| AF
+    AF --> N
+    ST --> APP
+    EV --> APP
+    CFG --- APP
+```
+
 ## The alignment (what runs where)
 
 | Concern | Where it lives | Who hosts it |

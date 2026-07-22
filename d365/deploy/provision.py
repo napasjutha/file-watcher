@@ -89,6 +89,50 @@ class Client:
         return self.call("POST", path, body)
 
 
+class DryRunClient:
+    """Same interface as Client, no HTTP. Existence checks come back 'not found'
+    so every planned create is printed; platform-data lookups (sdkmessages,
+    sdkmessagefilters, WhoAmI, GlobalOptionSetDefinitions post-create reads)
+    return synthetic rows so the run completes end-to-end."""
+
+    _ZERO = "00000000-0000-0000-0000-000000000000"
+    _PLATFORM = ("sdkmessages?", "sdkmessagefilters?", "WhoAmI")
+    _SYNTHETIC_ROW = {
+        "sdkmessageid": _ZERO,
+        "sdkmessagefilterid": _ZERO,
+        "MetadataId": _ZERO,
+        "UserId": "dry-run",
+    }
+
+    def __init__(self):
+        self.calls = []
+
+    def call(self, method, path, body=None, ok404=False):
+        if method != "GET":
+            self.calls.append((method, path))
+            print(f"    DRY-RUN {method} {path}" + (f"  ({len(json.dumps(body))} bytes)" if body else ""))
+        if method == "GET":
+            if path.startswith("GlobalOptionSetDefinitions"):
+                posted = any(m == "POST" and p.startswith("GlobalOptionSetDefinitions") for m, p in self.calls)
+                if ok404 and not posted:
+                    return 404, None
+                return 200, dict(self._SYNTHETIC_ROW)
+            if path.startswith(self._PLATFORM):
+                if "$filter" in path:
+                    return 200, {"value": [dict(self._SYNTHETIC_ROW)]}
+                return 200, dict(self._SYNTHETIC_ROW)
+            if "$filter" in path:
+                return 200, {"value": []}
+            return (404, None) if ok404 else (200, {"value": []})
+        return 204, {"@id": f"dryrun({self._ZERO})"}
+
+    def get(self, path, ok404=False):
+        return self.call("GET", path, ok404=ok404)
+
+    def post(self, path, body):
+        return self.call("POST", path, body)
+
+
 def label(text):
     return {
         "@odata.type": "Microsoft.Dynamics.CRM.Label",
@@ -341,8 +385,11 @@ def find_single(client, path, what):
 
 
 def ensure_plugin(client, dll_path):
-    with open(dll_path, "rb") as handle:
-        content = base64.b64encode(handle.read()).decode("ascii")
+    if dll_path:
+        with open(dll_path, "rb") as handle:
+            content = base64.b64encode(handle.read()).decode("ascii")
+    else:  # dry-run without a built DLL
+        content = base64.b64encode(b"dry-run-placeholder").decode("ascii")
 
     _, body = client.get(f"pluginassemblies?$select=pluginassemblyid&$filter=name eq '{ASSEMBLY_NAME}'")
     rows = body.get("value", [])
@@ -456,21 +503,48 @@ def ensure_custom_api(client, plugin_type_id):
     print(f"  + created Custom API {CUSTOM_API_NAME} (InterfaceId → EventCount)")
 
 
+def seed_rows(client, seed_path):
+    """Seed fwm_connection / fwm_interface rows from a JSON file (see
+    seed.example.json). Idempotent: rows are matched on their primary name
+    column and skipped if present. Entity set names are the default Dataverse
+    pluralization (fwm_connection -> fwm_connections)."""
+    with open(seed_path) as handle:
+        seed = json.load(handle)
+
+    plans = [
+        ("fwm_connections", "fwm_connectionref", seed.get("connections", [])),
+        ("fwm_interfaces", "fwm_interfaceid", seed.get("interfaces", [])),
+    ]
+    for entity_set, name_col, rows in plans:
+        for row in rows:
+            key = row[name_col]
+            _, body = client.get(f"{entity_set}?$select={name_col}&$filter={name_col} eq '{key}'")
+            if body.get("value"):
+                print(f"  = {entity_set} '{key}'")
+                continue
+            client.post(entity_set, row)
+            print(f"  + seeded {entity_set} '{key}'")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--url", required=True, help="Environment URL, e.g. https://yourorg.crm.dynamics.com")
     parser.add_argument("--token", default=os.environ.get("DATAVERSE_TOKEN"), help="Bearer token (or set DATAVERSE_TOKEN)")
     parser.add_argument("--dll", help="Path to signed FileWatcherMonitoring.Dataverse.dll (omit with --tables-only)")
     parser.add_argument("--tables-only", action="store_true", help="Provision choice/tables/keys only")
+    parser.add_argument("--seed", help="JSON file with sample fwm_connection/fwm_interface rows (see seed.example.json)")
+    parser.add_argument("--dry-run", action="store_true", help="Print every planned request; no HTTP, no token needed")
     args = parser.parse_args()
 
-    if not args.token:
-        sys.exit("No token. Set DATAVERSE_TOKEN or pass --token. "
-                 "E.g.: az account get-access-token --resource <url> --query accessToken -o tsv")
-    if not args.tables_only and not args.dll:
-        sys.exit("Pass --dll <path to FileWatcherMonitoring.Dataverse.dll> (or use --tables-only).")
-
-    client = Client(args.url, args.token)
+    if args.dry_run:
+        client = DryRunClient()
+    else:
+        if not args.token:
+            sys.exit("No token. Set DATAVERSE_TOKEN or pass --token. "
+                     "E.g.: az account get-access-token --resource <url> --query accessToken -o tsv")
+        if not args.tables_only and not args.dll:
+            sys.exit("Pass --dll <path to FileWatcherMonitoring.Dataverse.dll> (or use --tables-only).")
+        client = Client(args.url, args.token)
 
     print("WhoAmI check...")
     _, who = client.get("WhoAmI")
@@ -484,6 +558,9 @@ def main():
         ensure_table(client, table, choice_id)
 
     if args.tables_only:
+        if args.seed:
+            print("Seeding config rows")
+            seed_rows(client, args.seed)
         print("Done (tables only).")
         return
 
@@ -493,6 +570,14 @@ def main():
 
     print("4/4 Custom API")
     ensure_custom_api(client, type_ids[PLUGIN_TYPE_SWEEP])
+
+    if args.seed:
+        print("Seeding config rows")
+        seed_rows(client, args.seed)
+
+    if args.dry_run:
+        print(f"\nDry run complete — {len(client.calls)} write requests planned, none sent.")
+        return
 
     print("""
 Provisioning complete. Remaining manual steps (see flow runbook):
